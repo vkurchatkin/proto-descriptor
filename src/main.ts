@@ -227,3 +227,16 @@ export function convertFileDescriptorSet(
 
   return root;
 }
+
+export function convertFileDescriptor(
+  buffer: Uint8Array,
+): Root {
+  const msg = proto.FileDescriptorProto.decode(buffer);
+  const root = new Root();
+
+   addFile(<proto.IFileDescriptorProto>msg, root);
+
+  postprocess(root);
+
+  return root;
+}
