@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package a;
+
+message A {
+  option deprecated = true;
+  string a = 1;
+  int32 b = 2;
+}

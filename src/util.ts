@@ -1,55 +1,6 @@
-import { Namespace, ReflectionObject, Type, Service, Method } from 'protobufjs';
 import { google } from '../proto';
 
 import proto = google.protobuf;
-
-export function lookupFullPath(
-  namespace: Namespace,
-  path: string,
-): string {
-  const obj = namespace.lookup(path);
-
-  if (!obj) {
-    throw new Error(`Invalid path: ${path}`);
-  }
-
-  return obj.fullName;
-}
-
-export function replaceTypesWithAbsolutes(
-  obj: ReflectionObject,
-) {
-  
-  if (obj instanceof Type) {
-    for (const field of obj.fieldsArray) {
-      if (field.resolvedType) {
-        field.type = field.resolvedType.fullName;
-      }
-    }
-  }
-
-  if (obj instanceof Service) {
-    for (const method of obj.methodsArray) {
-      replaceTypesWithAbsolutes(method);
-    }
-  }
-
-  if (obj instanceof Method) {
-    if (obj.resolvedRequestType) {
-      obj.requestType = obj.resolvedRequestType.fullName;
-    }
-
-    if (obj.resolvedResponseType) {
-      obj.responseType = obj.resolvedResponseType.fullName;
-    }
-  }
-
-  if (obj instanceof Namespace) {
-    for (const nested of obj.nestedArray) {
-      replaceTypesWithAbsolutes(nested);
-    }
-  }
-}
 
 export function convertFieldLabel(label: proto.FieldDescriptorProto.Label) {
   switch (label) {

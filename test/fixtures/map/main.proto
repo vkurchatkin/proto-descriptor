@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package a;
+
+message A {
+  map<string, B> b = 3;
+}
+
+message B {
+}
