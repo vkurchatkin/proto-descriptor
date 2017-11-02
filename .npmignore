@@ -1,0 +1,3 @@
+**/*.ts
+**/*.proto
+tsconfig.json
