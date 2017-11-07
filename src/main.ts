@@ -20,12 +20,6 @@ import proto = google.protobuf;
 const postprocessVisitor = new CompositeVisitor();
 postprocessVisitor.add(resolveMapsVisitor);
 
-function postprocess(root: Root) {
-  root.resolveAll();
-  visit(root, postprocessVisitor);
-  visit(root, removeMapEntriesVisitor);
-}
-
 function createField(desc: proto.IFieldDescriptorProto) {
   const name = util.camelCase(desc.name || '');
   const id = desc.number || 0;
@@ -216,14 +210,10 @@ function addFile(file: proto.IFileDescriptorProto, root: Root) {
 export function convertFileDescriptorSet(
   buffer: Uint8Array,
 ): Root {
-  const msg = proto.FileDescriptorSet.decode(buffer);
   const root = new Root();
 
-  for (const file of msg.file) {
-    addFile(file, root);
-  }
-
-  postprocess(root);
+  addFromFileDescriptorSet(root, buffer);
+  resolveAll(root);
 
   return root;
 }
@@ -231,12 +221,35 @@ export function convertFileDescriptorSet(
 export function convertFileDescriptor(
   buffer: Uint8Array,
 ): Root {
-  const msg = proto.FileDescriptorProto.decode(buffer);
   const root = new Root();
 
-   addFile(<proto.IFileDescriptorProto>msg, root);
-
-  postprocess(root);
+  addFromFileDescriptor(root, buffer);
+  resolveAll(root);
 
   return root;
+}
+
+export function addFromFileDescriptor(
+  root: Root,
+  buffer: Uint8Array,
+) {
+  const msg = proto.FileDescriptorProto.decode(buffer);
+  addFile(<proto.IFileDescriptorProto>msg, root);
+}
+
+export function addFromFileDescriptorSet(
+  root: Root,
+  buffer: Uint8Array,
+) {
+  const msg = proto.FileDescriptorSet.decode(buffer);
+  
+  for (const file of msg.file) {
+    addFile(file, root);
+  }
+}
+
+export function resolveAll(root: Root) {
+  root.resolveAll();
+  visit(root, postprocessVisitor);
+  visit(root, removeMapEntriesVisitor);
 }
