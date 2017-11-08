@@ -3,6 +3,7 @@
   "version": "0.0.2",
   "description": "",
   "main": "src/main.js",
+  "types": "src/main.d.ts",
   "scripts": {
     "test": "npm run compile && node test/main.js",
     "compile-proto": "pbjs -t static-module proto/*.proto -o proto/index.js --no-create --no-encode --no-delimited --no-convert --no-verify && pbts -o proto/index.d.ts proto/index.js",
