@@ -2,3 +2,4 @@
 !**/*.d.ts
 **/*.proto
 tsconfig.json
+.git
