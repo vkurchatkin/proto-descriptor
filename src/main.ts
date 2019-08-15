@@ -10,8 +10,13 @@ import {
   util,
 } from 'protobufjs';
 
-import { convertFieldLabel, convertType } from './util'; 
-import { CompositeVisitor, resolveMapsVisitor, removeMapEntriesVisitor, visit } from './visitor';
+import { convertFieldLabel, convertType } from './util';
+import {
+  CompositeVisitor,
+  resolveMapsVisitor,
+  removeMapEntriesVisitor,
+  visit,
+} from './visitor';
 
 import { google } from '../proto';
 
@@ -20,8 +25,23 @@ import proto = google.protobuf;
 const postprocessVisitor = new CompositeVisitor();
 postprocessVisitor.add(resolveMapsVisitor);
 
-function createField(desc: proto.IFieldDescriptorProto) {
-  const name = util.camelCase(desc.name || '');
+export interface ConversionOptions {
+  keepCase: boolean;
+}
+
+const defaultConversionOptions = {
+  keepCase: false,
+};
+
+function createField(
+  desc: proto.IFieldDescriptorProto,
+  conversionOptions: ConversionOptions,
+) {
+  let name: string = desc.name || '';
+  if (!conversionOptions.keepCase) {
+    name = util.camelCase(name);
+  }
+
   const id = desc.number || 0;
   const type = convertType(desc);
   const label = desc.label && convertFieldLabel(desc.label);
@@ -35,8 +55,11 @@ function createField(desc: proto.IFieldDescriptorProto) {
   return field;
 }
 
-
-function getOptions(obj: { [k: string]: any } | undefined, options: string[]) {
+function getOptions(
+  obj: { [k: string]: any } | undefined,
+  options: string[],
+  conversionOptions: ConversionOptions,
+) {
   if (!obj) {
     return undefined;
   }
@@ -44,16 +67,18 @@ function getOptions(obj: { [k: string]: any } | undefined, options: string[]) {
   const r: { [k: string]: any } = {};
 
   for (const option of options) {
-    const camelCased = util.camelCase(option);
+    let newName: string = option;
+    if (!conversionOptions.keepCase) {
+      newName = util.camelCase(newName);
+    }
 
-    if (obj.hasOwnProperty(camelCased)) {
-      r[option] = obj[camelCased];
+    if (obj.hasOwnProperty(newName)) {
+      r[option] = obj[newName];
     }
   }
 
   return r;
 }
-
 
 const messageOptions = [
   'message_set_wire_format',
@@ -62,24 +87,34 @@ const messageOptions = [
   'map_entry',
 ];
 
-function createType(messageType: proto.IDescriptorProto): Type | null {
+function createType(
+  messageType: proto.IDescriptorProto,
+  conversionOptions: ConversionOptions,
+): Type | null {
   const name = messageType.name || '';
 
-  const type = new Type(name, getOptions(messageType.options, messageOptions));
-  const oneOfs: { name: string, fields: string[] }[] = [];
+  const type = new Type(
+    name,
+    getOptions(messageType.options, messageOptions, conversionOptions),
+  );
+  const oneOfs: { name: string; fields: string[] }[] = [];
 
   if (messageType.oneofDecl) {
     for (const { name } of messageType.oneofDecl) {
       // TODO options
       if (name) {
-        oneOfs.push({ name: util.camelCase(name), fields: [] });
+        let newName: string = name;
+        if (!conversionOptions.keepCase) {
+          newName = util.camelCase(name);
+        }
+        oneOfs.push({ name: newName, fields: [] });
       }
     }
   }
 
   if (messageType.field) {
     for (const desc of messageType.field) {
-      const field = createField(desc);
+      const field = createField(desc, conversionOptions);
 
       if (field) {
         type.add(field);
@@ -88,9 +123,13 @@ function createType(messageType: proto.IDescriptorProto): Type | null {
 
         if (typeof oneofIndex === 'number') {
           const oneOf = oneOfs[oneofIndex];
+          let newName: string = field.name;
+          if (!conversionOptions.keepCase) {
+            newName = util.camelCase(newName);
+          }
 
           if (oneOf) {
-            oneOf.fields.push(util.camelCase(field.name));
+            oneOf.fields.push(newName);
           }
         }
       }
@@ -101,10 +140,10 @@ function createType(messageType: proto.IDescriptorProto): Type | null {
     type.add(new OneOf(name, fields));
   }
 
-  addTypes(messageType.nestedType, type);
-  addEnums(messageType.enumType, type);
+  addTypes(messageType.nestedType, type, conversionOptions);
+  addEnums(messageType.enumType, type, conversionOptions);
 
-  const reserved: (number[]|string)[] = [];
+  const reserved: (number[] | string)[] = [];
 
   if (messageType.reservedName) {
     reserved.push(...messageType.reservedName);
@@ -116,13 +155,15 @@ function createType(messageType: proto.IDescriptorProto): Type | null {
     }
   }
 
-
   type.reserved = reserved;
 
   return type;
 }
 
-function createEnum(desc: proto.IEnumDescriptorProto): Enum {
+function createEnum(
+  desc: proto.IEnumDescriptorProto,
+  conversionOptions: ConversionOptions,
+): Enum {
   const name = desc.name || '';
   const values: { [k: string]: number } = {};
 
@@ -137,7 +178,10 @@ function createEnum(desc: proto.IEnumDescriptorProto): Enum {
   return new Enum(name, values);
 }
 
-function createMethod(desc: proto.IMethodDescriptorProto): Method {
+function createMethod(
+  desc: proto.IMethodDescriptorProto,
+  conversionOptions: ConversionOptions,
+): Method {
   const {
     name = '',
     inputType = '',
@@ -146,15 +190,25 @@ function createMethod(desc: proto.IMethodDescriptorProto): Method {
     serverStreaming,
   } = desc;
 
-  return new Method(name, undefined, inputType, outputType, clientStreaming, serverStreaming);
+  return new Method(
+    name,
+    undefined,
+    inputType,
+    outputType,
+    clientStreaming,
+    serverStreaming,
+  );
 }
 
-function createService(desc: proto.IServiceDescriptorProto): Service {
+function createService(
+  desc: proto.IServiceDescriptorProto,
+  conversionOptions: ConversionOptions,
+): Service {
   const service = new Service(desc.name || '');
 
   if (desc.method) {
     for (const methodDesc of desc.method) {
-      service.add(createMethod(methodDesc));
+      service.add(createMethod(methodDesc, conversionOptions));
     }
   }
 
@@ -164,10 +218,11 @@ function createService(desc: proto.IServiceDescriptorProto): Service {
 function addTypes(
   descs: undefined | proto.IDescriptorProto[],
   namespace: Namespace,
+  conversionOptions: ConversionOptions,
 ) {
   if (descs) {
     for (const desc of descs) {
-      const type = createType(desc);
+      const type = createType(desc, conversionOptions);
       if (type) {
         namespace.add(type);
       }
@@ -178,16 +233,20 @@ function addTypes(
 function addEnums(
   descs: undefined | proto.IEnumDescriptorProto[],
   namespace: Namespace,
+  conversionOptions: ConversionOptions,
 ) {
   if (descs) {
     for (const desc of descs) {
-      namespace.add(createEnum(desc));
+      namespace.add(createEnum(desc, conversionOptions));
     }
   }
 }
 
-
-function addFile(file: proto.IFileDescriptorProto, root: Root) {
+function addFile(
+  file: proto.IFileDescriptorProto,
+  root: Root,
+  conversionOptions: ConversionOptions,
+) {
   const packageName = file.package;
 
   let namespace: Namespace = root;
@@ -196,12 +255,12 @@ function addFile(file: proto.IFileDescriptorProto, root: Root) {
     namespace = root.define(packageName || '');
   }
 
-  addTypes(file.messageType, namespace);
-  addEnums(file.enumType, namespace);
-  
+  addTypes(file.messageType, namespace, conversionOptions);
+  addEnums(file.enumType, namespace, conversionOptions);
+
   if (file.service) {
     for (const desc of file.service) {
-      const service = createService(desc);
+      const service = createService(desc, conversionOptions);
       namespace.add(service);
     }
   }
@@ -209,6 +268,7 @@ function addFile(file: proto.IFileDescriptorProto, root: Root) {
 
 export function convertFileDescriptorSet(
   buffer: Uint8Array,
+  conversionOptions: ConversionOptions = defaultConversionOptions,
 ): Root {
   const root = new Root();
 
@@ -220,6 +280,7 @@ export function convertFileDescriptorSet(
 
 export function convertFileDescriptor(
   buffer: Uint8Array,
+  conversionOptions: ConversionOptions = defaultConversionOptions,
 ): Root {
   const root = new Root();
 
@@ -232,19 +293,21 @@ export function convertFileDescriptor(
 export function addFromFileDescriptor(
   root: Root,
   buffer: Uint8Array,
+  conversionOptions: ConversionOptions = defaultConversionOptions,
 ) {
   const msg = proto.FileDescriptorProto.decode(buffer);
-  addFile(<proto.IFileDescriptorProto>msg, root);
+  addFile(<proto.IFileDescriptorProto>msg, root, conversionOptions);
 }
 
 export function addFromFileDescriptorSet(
   root: Root,
   buffer: Uint8Array,
+  conversionOptions: ConversionOptions = defaultConversionOptions,
 ) {
   const msg = proto.FileDescriptorSet.decode(buffer);
-  
+
   for (const file of msg.file) {
-    addFile(file, root);
+    addFile(file, root, conversionOptions);
   }
 }
 
