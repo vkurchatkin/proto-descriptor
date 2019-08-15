@@ -30,11 +30,18 @@ export interface ConversionOptions {
 }
 
 const defaultConversionOptions = {
-  keepCase: true,
+  keepCase: false,
 };
 
-function createField(desc: proto.IFieldDescriptorProto) {
-  const name = util.camelCase(desc.name || '');
+function createField(
+  desc: proto.IFieldDescriptorProto,
+  conversionOptions: ConversionOptions,
+) {
+  let name: string = desc.name || '';
+  if (!conversionOptions.keepCase) {
+    name = util.camelCase(name);
+  }
+
   const id = desc.number || 0;
   const type = convertType(desc);
   const label = desc.label && convertFieldLabel(desc.label);
@@ -51,7 +58,7 @@ function createField(desc: proto.IFieldDescriptorProto) {
 function getOptions(
   obj: { [k: string]: any } | undefined,
   options: string[],
-  conversionOptions: ConversionOptions = defaultConversionOptions,
+  conversionOptions: ConversionOptions,
 ) {
   if (!obj) {
     return undefined;
@@ -60,10 +67,13 @@ function getOptions(
   const r: { [k: string]: any } = {};
 
   for (const option of options) {
-    const camelCased = util.camelCase(option);
+    let newName: string = option;
+    if (!conversionOptions.keepCase) {
+      newName = util.camelCase(newName);
+    }
 
-    if (obj.hasOwnProperty(camelCased)) {
-      r[option] = obj[camelCased];
+    if (obj.hasOwnProperty(newName)) {
+      r[option] = obj[newName];
     }
   }
 
@@ -79,25 +89,32 @@ const messageOptions = [
 
 function createType(
   messageType: proto.IDescriptorProto,
-  conversionOptions: ConversionOptions = defaultConversionOptions,
+  conversionOptions: ConversionOptions,
 ): Type | null {
   const name = messageType.name || '';
 
-  const type = new Type(name, getOptions(messageType.options, messageOptions));
+  const type = new Type(
+    name,
+    getOptions(messageType.options, messageOptions, conversionOptions),
+  );
   const oneOfs: { name: string; fields: string[] }[] = [];
 
   if (messageType.oneofDecl) {
     for (const { name } of messageType.oneofDecl) {
       // TODO options
       if (name) {
-        oneOfs.push({ name: util.camelCase(name), fields: [] });
+        let newName: string = name;
+        if (!conversionOptions.keepCase) {
+          newName = util.camelCase(name);
+        }
+        oneOfs.push({ name: newName, fields: [] });
       }
     }
   }
 
   if (messageType.field) {
     for (const desc of messageType.field) {
-      const field = createField(desc);
+      const field = createField(desc, conversionOptions);
 
       if (field) {
         type.add(field);
@@ -106,9 +123,13 @@ function createType(
 
         if (typeof oneofIndex === 'number') {
           const oneOf = oneOfs[oneofIndex];
+          let newName: string = field.name;
+          if (!conversionOptions.keepCase) {
+            newName = util.camelCase(newName);
+          }
 
           if (oneOf) {
-            oneOf.fields.push(util.camelCase(field.name));
+            oneOf.fields.push(newName);
           }
         }
       }
